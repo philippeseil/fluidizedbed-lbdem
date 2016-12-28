@@ -1,0 +1,159 @@
+\documentclass[12pt]{article}
+
+\newcommand{\cloption}[1]{\lstinline{#1}}
+
+%\usepackage{fullpage}
+
+\usepackage{listings}
+\lstset{basicstyle=\footnotesize\ttfamily,breaklines=true}
+
+\usepackage{cleveref}
+
+\title{Documentation for fluidizedbed case}
+\author{Philippe Seil}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\section{General}
+
+This document describes an \emph{LBDEMcoupling} case simulating a part
+of a fluidized bed. The bed is considered infinite, which is modelled
+by using periodic boundary conditions in lateral directions. \\
+
+\section{Running the case}
+
+The case is controlled by a set of command line options described in
+\cref{sect:cloptions}. To run on Lise, a run script is required. This
+script can be controlled by submitting shell variables via the command
+line. An example command line could be
+\begin{lstlisting}
+qsub -v LD_LIBRARY_PATH=$LD_LIBRARY_PATH,COHESION=0,U_IN=1.2,U_MAX_RE=5,OUTDIR=air_test/ run_fluidizedbed.sh
+\end{lstlisting}
+The switch $-v$ allows to set variables for access within the
+script. The script provided will create a subdirectory with velocity
+and cohesion in the directory name. If this directory already exists,
+it will be deleted and recreated, thus \emph{be careful what you wish
+  for} when starting a new simulation! \\
+
+\section{Setup}
+\subsection{Geometry}
+
+The case consists of a box with extents $l_x$, $l_y$, $l_z$. The $x$
+and $y$ directions are fully periodic. In $z$ direction, the bottom
+wall is a velocity inlet and the top wall is a fixed pressure
+outlet. Before the outlet, a sponge zone in which the viscosity is
+gradually increased is added to reduce reflections. At a distance
+$d_{in}$ form the inlet, a wall is placed. This wall only affects the
+particles and keeps them from falling into the inlet, which could
+cause computational trouble. 
+
+\subsection{Initialization}
+
+Prior to a full simulation, a DEM-only initialization procedure is
+performed. First, the whole domain above $d_{in}$ is filled with
+particles until a volume fraction of
+$(1-\epsilon)$\footnote{$\epsilon$ usually denotes the void fraction
+  of a packing, thus $(1-\epsilon)$ is the particle solid fraction} is
+reached. These particles are then allowed to settle under gravity to
+form a close pack. Thus, setting $(1-\epsilon)$ indirectly controls
+the height of the un-expanded bed. Directly estimating the bed height
+is difficult, because other variables (such as the parallelization)
+also influence particle insertion, but experience has shown that
+$(1-\epsilon) = 0.4$ results in a bed height of slightly more than a
+third of the initially filled volume. Once the particles have settled,
+the real, coupled simulation starts. \\
+
+\subsection{Run}
+
+After the initialization procedure described above, interaction
+between fluid and solid is switched on, and the simulation is run for
+$t_{max}$ seconds. Currently, two modes are implemented: constant
+velocity and ramped velocity. Constant velocity means that the inlet
+velocity at the bottom of the domain is kept constant at $u_{in}^0$ for
+the whole simulation. For ramped velocity, an additonal time
+$t_{ramp}$ is needed. For $t < t_{ramp}$, the inlet velocity is given
+by
+\begin{equation}
+  u_{in}(t) = \frac{t}{t_{ramp}} u_{in}^0
+\end{equation}
+and for $t \geq t_{ramp}$ the inlet velocity remains
+constant. \\
+
+\subsection{Output}
+
+The specified output folder must contain subdirectories
+\lstinline{tmp/} for LB data and \lstinline{post/} for DEM data. Data
+is written at intervals $t_{write}$. The simulation periodically
+outputs the flow field (optional) to the LB output directory, and the
+particle properties to the DEM output directory. Additionally, the
+averaged pressure is written to a file named \lstinline{pressure.txt}
+and the inlet velocity is written to \lstinline{u\_in.txt}, both in
+the LB output directory. \\
+
+\section{Command line options} \label{sect:cloptions}
+
+The case accepts parameters via command line options. Unless stated
+otherwise, these options are all mandatory. All options require a
+value specified right after their occurence, for example
+\begin{lstlisting}
+  ./fluidizedbed -N 8 --u_in 0.5 [other options]
+\end{lstlisting}
+All physical quantities are expected in SI units. \\
+
+\begin{itemize}
+  \item \cloption{-N}: controls the resolution of the
+    case. $N$ grid cells per particle diameter will be used.
+  \item \cloption{--u\_in}: sets the inlet velocity $u_{in}^0$
+  \item \cloption{--u\_max\_lb}: sets the maximum LB velocity
+    $u_{max,lb}$. Decreasing $u_{max,lb}$ decreases the time step and
+    can increase stability in some cases. For this case, a value of
+    $u_{lb,max} = 0.05$ has been found to work just fine.
+  \item \cloption{--dt\_dem\_max}: sets an upper limit for the DEM
+    time step. The actual time step depends on the exact value of the
+    LB time step and is computed internally.
+  \item \cloption{--outdir}: specifies the directory to which the
+    output is written. This directory must exist, and contain two
+    subdirectories named \lstinline{tmp/} for LB data and
+    \lstinline{post/} for DEM data.
+  \item \cloption{--rho\_f}: controls the fluid density $\rho_f$.
+  \item \cloption{--nu\_f}: controls the kinematic viscosity of the
+    fluid $\nu_f$.
+  \item \cloption{--rho\_s}: controls the bulk density of the
+    particles $\rho_s$.
+  \item \cloption{--radius}: sets the radius $r_s$ of the particles.
+  \item \cloption{--vol\_frac}: sets the particle volume fraction
+    $(1-\epsilon)$ of the initial packing. This indirectly controls
+    the height of the particle bed, and should not be much higher than
+    $0.4$.
+  \item \cloption{--lx}, \cloption{--ly}, \cloption{--lz} set the size
+    of the simulation box. The full resolution per direction is then
+    given by $N_{tot,xyz} = N \frac{l_{xyz}}{2r_s}$.
+  \item \cloption{--inlet\_distance}: The distance $d_{in}$ of the
+    wall holding the particles to the inlet at $z=0$.
+  \item \cloption{--max\_t}: the runtime of the simulation, $t_{max}$.
+  \item \cloption{--write\_t}: the interval at which data is written, $t_{write}$.
+  \item \cloption{--write\_flowfield}: controls if the full flow
+    field is written to disk (the data can be quite large). Accepts
+    anything that can be casted to \lstinline{bool}, such as
+    \lstinline{true}/\lstinline{false}, $0$/$1$, \ldots \emph{This
+      argument is optional, default setting is \lstinline{false}}.
+  \item \cloption{--ramp\_time}: The time to ramp up the inlet
+    velocity to the final value set by \cloption{--u\_in},
+    $t_{ramp}$. Set to zero (or leave out alltogether) to disable
+    ramping. \emph{This argument is optional, default is no ramping}.
+  \item \cloption{--cohesion\_energy\_density}: Cohesion energy
+    density. The case uses the sjkr cohesion model of LIGGGHTS, and
+    the reader is referred to the LIGGGHTS documentation for details
+    on the cohesion model.
+  \item \cloption{--use\_smagorinsky}: controls whether
+    Smagorinsky-style turbulence modelling is used. Needs a boolean
+    value just as \cloption{--write\_flowfield}. \emph{This argument
+      is optional. Default is \lstinline{false}}.
+  \item \cloption{--c\_smago}: if the Smagorinsky model is used, the
+    Smagorinsky ``constant'' $c_s$ is set. \emph{This argument is
+      optional. Default value is $c_s = 0.15$.}
+\end{itemize}
+
+\end{document}
