@@ -291,7 +291,7 @@ int main(int argc, char* argv[]) {
 
     T const gRed = (rho_s-rho_f)/rho_s*9.81;
     T const t_settle = sqrt(2*lz/gRed);
-    plint const settleStp = ceil(2.*t_settle/1e-5);
+    plint const settleStp = ceil(5.*t_settle/1e-5);
     plint const settleStpReal = ceil(double(settleStp)/double(dumpSteps))*dumpSteps;
     wrapper.execCommand("timestep 1e-5");
     wrapper.execCommand("thermo 1000");
@@ -318,6 +318,8 @@ int main(int argc, char* argv[]) {
       current_uIn = uIn_lb;
       pcout << "no velocity ramping requested" << std::endl;
     }
+
+    setBoundaryVelocity(lattice,bottom,Array<T,3>(0.,0.,current_uIn));
 
     Array<plint,6> numSpongeCells;
 
